@@ -140,12 +140,16 @@ class SensorMath:
 
 from module.Filter import SavitzkyGolayFilter, MovingAverageFilter
 class SensorDataProcessor:
-    """センサーデータの処理と統合を行うクラス"""
+    """センサーデータの処理と統合を行うクラス（閾値処理付き）"""
     
-    def __init__(self, filter_type='sma', **filter_params):
+    def __init__(self, filter_type='sma', gyro_threshold=50.0, accel_threshold=0.15, **filter_params):
         self.last_time = None
         self.velocity = [0.0, 0.0, 0.0]  # [vx, vy, vz]
         self.filter_type = filter_type
+        
+        # 閾値設定
+        self.gyro_threshold = gyro_threshold
+        self.accel_threshold = accel_threshold
         
         if filter_type == 'savgol':
             window_length = filter_params.get('window_length', 7)
@@ -159,10 +163,30 @@ class SensorDataProcessor:
             
         else:
             self.filter = None
+    
+    def _apply_gyro_threshold(self, gyro_values):
+        """角速度に閾値処理を適用"""
+        processed_gyro = []
+        for value in gyro_values:
+            if abs(value) < self.gyro_threshold:
+                processed_gyro.append(0.0)
+            else:
+                processed_gyro.append(value)
+        return processed_gyro
+    
+    def _apply_accel_threshold(self, accel_values):
+        """加速度に閾値処理を適用"""
+        processed_accel = []
+        for value in accel_values:
+            if abs(value) < self.accel_threshold:
+                processed_accel.append(0.0)
+            else:
+                processed_accel.append(value)
+        return processed_accel
         
-    def process_sensor_data(self, parsed_data, current_time=None,  filter_stage='raw'):
+    def process_sensor_data(self, parsed_data, current_time=None, filter_stage='raw'):
         """
-        センサーデータを処理して統合結果を返す
+        センサーデータを処理して統合結果を返す（閾値処理付き）
         
         Args:
             parsed_data: パースされたセンサーデータ
@@ -179,25 +203,30 @@ class SensorDataProcessor:
         else:
             parsed_data = parsed_data
         
-        # 入力データの取得
-        local_accel = [
+        # 生データの取得
+        raw_local_accel = [
             parsed_data['acceleration']['x'],
             parsed_data['acceleration']['y'],
             parsed_data['acceleration']['z']
         ]
-        local_gyro = [
+        raw_local_gyro = [
             parsed_data['gyroscope']['x'],
             parsed_data['gyroscope']['y'],
             parsed_data['gyroscope']['z']
         ]
+        
+        # 閾値処理を適用
+        local_accel = self._apply_accel_threshold(raw_local_accel)
+        local_gyro = self._apply_gyro_threshold(raw_local_gyro)
+        
         quaternion = parsed_data['quaternion']
         
-        # 座標変換
+        # 座標変換（閾値処理済みデータを使用）
         global_accel = SensorMath.transform_to_global(local_accel, quaternion)
         euler_rates = SensorMath.body_angular_velocity_to_euler_rates(local_gyro, quaternion)
         gravity_corrected_gyro = SensorMath.get_gravity_corrected_angular_velocity(local_gyro, quaternion)
         
-        # 速度計算
+        # 速度計算（閾値処理済みの加速度を使用）
         if self.last_time is not None:
             dt = current_time - self.last_time
             self.velocity[0] = SensorMath.lowcut_integration(self.velocity[0], global_accel[0], dt)
@@ -211,9 +240,11 @@ class SensorDataProcessor:
         
         return {
             'timestamp': current_time,
-            'local_acceleration': local_accel,
-            'global_acceleration': global_accel,
-            'local_gyroscope': local_gyro,
+            'local_acceleration': local_accel,      # 閾値処理済み
+            'global_acceleration': global_accel,    # 閾値処理済み
+            'local_gyroscope': local_gyro,          # 閾値処理済み
+            'raw_acceleration': raw_local_accel,    # 生データも保持
+            'raw_gyroscope': raw_local_gyro,        # 生データも保持
             'euler_rates': euler_rates,
             'gravity_corrected_gyro': gravity_corrected_gyro,
             'velocity': self.velocity.copy(),
@@ -222,8 +253,24 @@ class SensorDataProcessor:
             'energy': energy
         }
     
+    def set_gyro_threshold(self, threshold):
+        """角速度閾値を設定"""
+        self.gyro_threshold = threshold
+        print(f"角速度閾値を {threshold} に設定")
+    
+    def set_accel_threshold(self, threshold):
+        """加速度閾値を設定"""
+        self.accel_threshold = threshold
+        print(f"加速度閾値を {threshold} に設定")
+    
+    def set_thresholds(self, gyro_threshold=None, accel_threshold=None):
+        """両方の閾値を同時に設定"""
+        if gyro_threshold is not None:
+            self.gyro_threshold = gyro_threshold
+        if accel_threshold is not None:
+            self.accel_threshold = accel_threshold
+        print(f"閾値設定: 角速度={self.gyro_threshold}, 加速度={self.accel_threshold}")
+    
     def reset_velocity(self):
         """速度をリセット"""
         self.velocity = [0.0, 0.0, 0.0]
-
-
