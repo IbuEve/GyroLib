@@ -1,6 +1,7 @@
 import numpy as np
 import math
 from collections import deque
+import time
 
 class SensorMath:
     """センサーデータの数学的変換を行う汎用クラス"""
@@ -114,7 +115,7 @@ class SensorMath:
         return [horizontal_x, horizontal_y, vertical_rotation]
     
     @staticmethod
-    def lowcut_integration(previous_velocity, current_accel, dt, q=0.95):
+    def lowcut_integration(previous_velocity, current_accel, dt, q=0.99):
         """論文ベースのローカットフィルター付き積分"""
         return q * previous_velocity + dt * current_accel
     
@@ -137,14 +138,29 @@ class SensorMath:
             'rotational': rotational_energy
         }
 
+from module.Filter import SavitzkyGolayFilter, MovingAverageFilter
 class SensorDataProcessor:
     """センサーデータの処理と統合を行うクラス"""
     
-    def __init__(self):
+    def __init__(self, filter_type='sma', **filter_params):
         self.last_time = None
         self.velocity = [0.0, 0.0, 0.0]  # [vx, vy, vz]
+        self.filter_type = filter_type
         
-    def process_sensor_data(self, parsed_data, current_time=None):
+        if filter_type == 'savgol':
+            window_length = filter_params.get('window_length', 7)
+            polyorder = filter_params.get('polyorder', 2)
+            self.filter = SavitzkyGolayFilter(window_length, polyorder)
+            
+        elif filter_type in ['sma', 'ema']:
+            window_size = filter_params.get('window_size', 20)
+            alpha = filter_params.get('alpha', 0.5)
+            self.filter = MovingAverageFilter(window_size, alpha, filter_type)
+            
+        else:
+            self.filter = None
+        
+    def process_sensor_data(self, parsed_data, current_time=None,  filter_stage='raw'):
         """
         センサーデータを処理して統合結果を返す
         
@@ -158,6 +174,11 @@ class SensorDataProcessor:
         if current_time is None:
             current_time = time.time()
             
+        if self.filter and filter_stage in ['raw', 'both']:
+            parsed_data = self.filter.filter_raw_data(parsed_data)
+        else:
+            parsed_data = parsed_data
+        
         # 入力データの取得
         local_accel = [
             parsed_data['acceleration']['x'],
@@ -204,3 +225,5 @@ class SensorDataProcessor:
     def reset_velocity(self):
         """速度をリセット"""
         self.velocity = [0.0, 0.0, 0.0]
+
+

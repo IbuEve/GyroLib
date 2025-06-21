@@ -1,7 +1,7 @@
 import time
-from sensor_receiver import GyroStickReceiver
-from sensor_math import SensorDataProcessor
-from sensor_visualizer import SensorDataVisualizer
+from module.SensorReceiver import GyroStickReceiver
+from module.SensorMath import SensorDataProcessor
+from module.SensorVisualizer import SensorDataVisualizer
 
 def main():
     # 各クラスのインスタンス作成
@@ -49,7 +49,6 @@ def main():
         print("Closing application...")
     finally:
         # クリーンアップ
-        receiver.stop_sensor()
         receiver.stop_receiving()
         print("Application closed")
 

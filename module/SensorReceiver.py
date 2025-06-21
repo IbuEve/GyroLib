@@ -115,7 +115,7 @@ class GyroStickReceiver:
         if self.clients is not None and self.sock is not None:
             try:
                 self.sock.sendto(command.encode(encoding='utf-8'), self.clients)
-                print(f"Command sent: {command}")
+                # print(f"Command sent: {command}")
             except Exception as e:
                 if self.error_callback:
                     self.error_callback(f"Send error: {e}")

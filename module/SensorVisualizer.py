@@ -83,7 +83,7 @@ class SensorDataVisualizer:
                     'Euler Angular Rates (rad/s)',
                     'Local (Sensor) Angular Velocity (rad/s)'
                 ],
-                'ylims': [[-20, 20], [-5, 5], [-400, 400], [-400, 400]]
+                'ylims': [[-20, 20], [-1, 1], [-400, 400], [-400, 400]]
             }
         
         self.fig, self.axes = plt.subplots(
@@ -143,7 +143,7 @@ class SensorDataVisualizer:
             self.axes[3].set_title('Local (Sensor) Angular Velocity (rad/s)')
             
             # Y軸範囲設定
-            ylims = [[-20, 20], [-5, 5], [-400, 400], [-400, 400]]
+            ylims = [[-20, 20], [-1, 1], [-400, 400], [-400, 400]]
             for ax, ylim in zip(self.axes, ylims):
                 ax.set_ylim(ylim)
             
