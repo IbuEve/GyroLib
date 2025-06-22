@@ -137,6 +137,36 @@ class SensorMath:
             'translational': translational_energy,
             'rotational': rotational_energy
         }
+    
+    @staticmethod
+    def trapezoidal_integration(current_velocity, current_accel, prev_accel, dt):
+        """
+        台形公式による速度積分
+        
+        Args:
+            current_velocity: 現在の速度 [vx, vy, vz]
+            current_accel: 現在の加速度 [ax, ay, az]
+            prev_accel: 前回の加速度 [ax, ay, az] (None可)
+            dt: 時間ステップ
+            
+        Returns:
+            新しい速度 [vx, vy, vz]
+        """
+        decay_factor = 0.95
+        v0 = np.array(current_velocity)
+        a_current = np.array(current_accel)
+        
+        if prev_accel is None:
+            # 初回時はオイラー法でフォールバック
+            return (v0 + a_current * dt).tolist()
+        
+        a_prev = np.array(prev_accel)
+        
+        # 台形公式: v(t+dt) = v(t) + dt * (a(t) + a(t+dt)) / 2
+        a_average = (a_prev + a_current) / 2
+        new_velocity = decay_factor * v0 + dt * a_average
+        
+        return new_velocity.tolist()
 
 from module.Filter import SavitzkyGolayFilter, MovingAverageFilter
 class SensorDataProcessor:
@@ -146,7 +176,9 @@ class SensorDataProcessor:
         self.last_time = None
         self.velocity = [0.0, 0.0, 0.0]  # [vx, vy, vz]
         self.filter_type = filter_type
-        
+        self.prev_accel = None  # RK4用
+        self.accel_history = deque(maxlen=4)
+
         # 閾値設定
         self.gyro_threshold = gyro_threshold
         self.accel_threshold = accel_threshold
@@ -229,10 +261,10 @@ class SensorDataProcessor:
         # 速度計算（閾値処理済みの加速度を使用）
         if self.last_time is not None:
             dt = current_time - self.last_time
-            self.velocity[0] = SensorMath.lowcut_integration(self.velocity[0], global_accel[0], dt)
-            self.velocity[1] = SensorMath.lowcut_integration(self.velocity[1], global_accel[1], dt)
-            self.velocity[2] = SensorMath.lowcut_integration(self.velocity[2], global_accel[2], dt)
-        
+            self.velocity = SensorMath.trapezoidal_integration(
+                self.velocity, global_accel, self.prev_accel, dt
+            )
+            self.prev_accel = global_accel.copy()
         self.last_time = current_time
         
         # エネルギー計算

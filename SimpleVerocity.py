@@ -14,15 +14,16 @@ class MovementBasedLED:
         
         # 移動量関連
         self.accumulated_distance = 0.0  # 累積移動距離
-        self.distance_scale = 10.0       # 距離スケール（色変化の感度）
-        self.distance_decay = 0.995      # 距離の減衰係数（長時間静止で徐々にリセット）
-        
+        self.distance_scale = 1.0       # 距離スケール（色変化の感度）
+        self.distance_decay = 0.99      # 距離の減衰係数（長時間静止で徐々にリセット）
+        self.max_accumulated_distance = 1
+
         # 前回の時刻と位置（移動距離計算用）
         self.last_time = None
         self.last_velocity = np.array([0.0, 0.0, 0.0])
         
         # 静止判定
-        self.stationary_threshold = 0.1  # この値以下は静止とみなす
+        self.stationary_threshold = 0.3  # この値以下は静止とみなす
         self.stationary_duration = 0.0   # 静止している時間
         
     def update_led(self, velocity, current_time):
@@ -38,14 +39,14 @@ class MovementBasedLED:
                 distance_increment = np.linalg.norm(avg_velocity) * dt
                 
                 # 累積移動距離を更新
-                self.accumulated_distance += distance_increment
-                
+                self.accumulated_distance = min(self.max_accumulated_distance, self.accumulated_distance + distance_increment)
+
                 # 静止判定と距離減衰
                 current_speed = np.linalg.norm(current_velocity)
                 if current_speed < self.stationary_threshold:
                     self.stationary_duration += dt
                     # 長時間静止していたら距離を徐々に減衰
-                    if self.stationary_duration > 2.0:  # 2秒以上静止
+                    if self.stationary_duration > 0.5:
                         self.accumulated_distance *= self.distance_decay
                 else:
                     self.stationary_duration = 0.0
@@ -74,10 +75,10 @@ class MovementBasedLED:
     def _get_color_from_distance(self, distance):
         """累積移動距離から色を決定"""
         # 距離を正規化（0-1の範囲に循環）
-        normalized_distance = (distance / self.distance_scale) % 1.0
+        normalized_distance = min(1, distance / self.distance_scale)
         
         # HSVベースで色を決定（距離に応じて色相が変化）
-        hue = normalized_distance * 360  # 0-360度
+        hue = 120 - normalized_distance * 120  # 0-360度
         saturation = 1.0
         value = 1.0
         
@@ -195,9 +196,9 @@ if __name__ == "__main__":
     
     # 設定調整
     pipeline.configure(
-        velocity_scale=1.5,      # 速度感度（小さいほど敏感）
-        distance_scale=8.0,      # 距離感度（小さいほど早く色変化）
-        distance_decay=0.99,    # 減衰率（1.0に近いほど減衰が遅い）
+        velocity_scale=1,      # 速度感度（小さいほど敏感）
+        distance_scale=1.0,      # 距離感度（小さいほど早く色変化）
+        distance_decay=0.95,    # 減衰率（1.0に近いほど減衰が遅い）
         curve_power=2.0          # 明度カーブ
     )
     
