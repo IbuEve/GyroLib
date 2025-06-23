@@ -2,12 +2,15 @@ import socket
 import threading
 import time
 import re
+import csv
+import os
+from datetime import datetime
 from typing import Callable, Optional
 
 class GyroStickReceiver:
-    """ジャイロスティックデータの受信クラス"""
+    """ジャイロスティックデータの受信クラス（データ保存機能付き）"""
     
-    def __init__(self, host='192.168.1.164', port=12351):
+    def __init__(self, host='172.20.10.4', port=12351, enable_data_save=False, save_folder="SaveData"):
         self.host = host
         self.port = port
         self.sock = None
@@ -16,12 +19,102 @@ class GyroStickReceiver:
         self.data_callback = None
         self.error_callback = None
         
+        # データ保存機能
+        self.enable_data_save = enable_data_save
+        self.save_folder = save_folder
+        self.data_saver = None
+        self.file_lock = threading.Lock()
+        
+        if self.enable_data_save:
+            self._initialize_data_save()
+        
         # データ検証パターン
         self.data_pattern = re.compile(
             r'^(\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)'
             r'\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)'
             r'\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)$'
         )
+    
+    def _initialize_data_save(self):
+        """データ保存の初期化"""
+        try:
+            # 保存フォルダを作成
+            os.makedirs(self.save_folder, exist_ok=True)
+            
+            # タイムスタンプ付きファイル名を生成
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"gyro_stick_raw_data_{timestamp}.csv"
+            self.csv_filepath = os.path.join(self.save_folder, filename)
+            
+            # CSVヘッダーを定義
+            self.csv_headers = [
+                'timestamp',
+                'receive_time',
+                'raw_message',
+                'button',
+                'quaternion_w', 'quaternion_x', 'quaternion_y', 'quaternion_z',
+                'acceleration_x', 'acceleration_y', 'acceleration_z',
+                'gyroscope_x', 'gyroscope_y', 'gyroscope_z',
+                'client_address',
+                'valid_data'
+            ]
+            
+            # CSVファイルを初期化（ヘッダー書き込み）
+            with open(self.csv_filepath, 'w', newline='', encoding='utf-8') as file:
+                writer = csv.writer(file)
+                writer.writerow(self.csv_headers)
+            
+            print(f"データ保存開始: {self.csv_filepath}")
+            
+        except Exception as e:
+            print(f"データ保存初期化エラー: {e}")
+            self.enable_data_save = False
+    
+    def _save_data(self, raw_message, parsed_data, client_addr, receive_time):
+        """データを保存"""
+        if not self.enable_data_save:
+            return
+        
+        try:
+            # 現在時刻をタイムスタンプとして使用
+            current_timestamp = time.time()
+            
+            # データを抽出
+            if parsed_data['valid']:
+                button = parsed_data['button']
+                quat = parsed_data['quaternion']
+                accel = parsed_data['acceleration']
+                gyro = parsed_data['gyroscope']
+                valid_data = True
+            else:
+                # 無効なデータの場合は空値で埋める
+                button = None
+                quat = {'w': None, 'x': None, 'y': None, 'z': None}
+                accel = {'x': None, 'y': None, 'z': None}
+                gyro = {'x': None, 'y': None, 'z': None}
+                valid_data = False
+            
+            # CSVの行データを作成
+            row_data = [
+                current_timestamp,
+                receive_time,
+                raw_message,
+                button,
+                quat['w'], quat['x'], quat['y'], quat['z'],
+                accel['x'], accel['y'], accel['z'],
+                gyro['x'], gyro['y'], gyro['z'],
+                str(client_addr),
+                valid_data
+            ]
+            
+            # ファイルに書き込み（スレッドセーフ）
+            with self.file_lock:
+                with open(self.csv_filepath, 'a', newline='', encoding='utf-8') as file:
+                    writer = csv.writer(file)
+                    writer.writerow(row_data)
+                    
+        except Exception as e:
+            print(f"データ保存エラー: {e}")
     
     def set_data_callback(self, callback: Callable):
         """データ受信時のコールバック関数を設定"""
@@ -89,13 +182,20 @@ class GyroStickReceiver:
         while self.loop_flag:
             try:
                 message, cli_addr = self.sock.recvfrom(M_SIZE)
+                receive_time = time.time()  # 受信時刻を記録
+                
                 if self.clients is None:
                     self.clients = cli_addr
                     print(f"Client connected: {cli_addr}")
                 
-                message = message.decode(encoding='utf-8')
-                parsed_data = self.validate_and_parse_data(message)
+                raw_message = message.decode(encoding='utf-8')
+                parsed_data = self.validate_and_parse_data(raw_message)
                 
+                # データ保存（有効/無効データ問わず保存）
+                if self.enable_data_save:
+                    self._save_data(raw_message, parsed_data, cli_addr, receive_time)
+                
+                # コールバック処理
                 if parsed_data['valid']:
                     if self.data_callback:
                         self.data_callback(parsed_data)
@@ -127,7 +227,15 @@ class GyroStickReceiver:
         self.loop_flag = False
         if self.sock:
             self.sock.close()
+        
+        if self.enable_data_save:
+            print(f"データ保存終了: {self.csv_filepath}")
+        
         print("Receiver stopped")
+    
+    def get_save_filepath(self):
+        """保存ファイルパスを取得"""
+        return self.csv_filepath if self.enable_data_save else None
     
     # 便利メソッド
     def start_sensor(self):

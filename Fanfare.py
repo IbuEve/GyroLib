@@ -196,8 +196,8 @@ class ZoneBasedLED:
 class ZoneBasedPipeline:
     """ゾーンベースLED制御パイプライン"""
     
-    def __init__(self):
-        self.receiver = GyroStickReceiver()
+    def __init__(self, enable_data_save = False):
+        self.receiver = GyroStickReceiver(enable_data_save=enable_data_save)
         self.processor = SensorDataProcessor()
         self.led_controller = ZoneBasedLED(self.receiver)
         
@@ -283,7 +283,7 @@ class ZoneBasedPipeline:
 
 # 使用例
 if __name__ == "__main__":
-    pipeline = ZoneBasedPipeline()
+    pipeline = ZoneBasedPipeline(enable_data_save=True)
     
     # 設定調整
     pipeline.configure(
