@@ -196,13 +196,17 @@ class ZoneBasedLED:
 class ZoneBasedPipeline:
     """ゾーンベースLED制御パイプライン"""
     
-    def __init__(self, enable_data_save = False):
+    def __init__(self, enable_data_save=False):
         self.receiver = GyroStickReceiver(enable_data_save=enable_data_save)
         self.processor = SensorDataProcessor()
         self.led_controller = ZoneBasedLED(self.receiver)
         
         self.receiver.set_data_callback(self._on_data_received)
         self.receiver.set_error_callback(self._on_error)
+        
+        # キーボード入力用
+        self.input_thread = None
+        self.running = False
         
         # デバッグ用
         self.last_debug_time = 0
@@ -250,6 +254,31 @@ class ZoneBasedPipeline:
         """エラー処理"""
         print(f"受信エラー: {error_msg}")
     
+    def _keyboard_input_loop(self):
+        """キーボード入力処理ループ"""
+        print("\nキーボードコマンド:")
+        print("  'l' + Enter → LED制御 オン/オフ切り替え")
+        print("  'q' + Enter → 終了")
+        print()
+        
+        while self.running:
+            try:
+                user_input = input().strip().lower()
+                
+                if user_input == 'l':
+                    # LED制御切り替え
+                    self.receiver.toggle_led_control()
+                elif user_input == 'q':
+                    # 終了
+                    print("終了コマンドが入力されました")
+                    self.stop()
+                    break
+                    
+            except (EOFError, KeyboardInterrupt):
+                break
+            except Exception as e:
+                print(f"入力エラー: {e}")
+    
     def start(self):
         """開始"""
         print("=== ゾーンベースLED制御 ===")
@@ -268,12 +297,19 @@ class ZoneBasedPipeline:
         print(f"  - ボタン速度スケール: {self.led_controller.button_velocity_scale}")
         print("")
         
+        self.running = True
         self.receiver.start_receiving()
+        
+        # キーボード入力スレッドを開始
+        self.input_thread = threading.Thread(target=self._keyboard_input_loop)
+        self.input_thread.daemon = True
+        self.input_thread.start()
     
     def stop(self):
         """停止"""
         print("停止中...")
-        self.receiver.led_on(0, 0, 0)
+        self.running = False
+        self.receiver.led_on(0, 0, 0)  # 最後に確実に消灯
         self.receiver.stop_receiving()
         print("停止完了")
     
@@ -308,26 +344,10 @@ if __name__ == "__main__":
         print("  🟠 赤→緑移行 → 赤色減衰（緑の帯域を回避）")
         print("  ⚪ ボタン押下 → 白色で速度に応じた明度")
         print("")
-        print("コマンド:")
-        print("  'q' + Enter → 終了")
-        print("")
         
-        # キーボード入力スレッド
-        def input_thread():
-            while True:
-                try:
-                    user_input = input().strip().lower()
-                    if user_input == 'q':
-                        break
-                except:
-                    break
-        
-        input_handler = threading.Thread(target=input_thread)
-        input_handler.daemon = True
-        input_handler.start()
-        
-        while True:
-            time.sleep(0.1)
+        # メインループ（キーボード入力は別スレッドで処理）
+        while pipeline.running:
+            time.sleep(0.001)
             
     except KeyboardInterrupt:
         print("\n終了中...")

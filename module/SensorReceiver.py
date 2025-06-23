@@ -19,6 +19,9 @@ class GyroStickReceiver:
         self.data_callback = None
         self.error_callback = None
         
+        # LED制御フラグを追加
+        self.led_enabled = True  # LED制御の有効/無効
+        
         # データ保存機能
         self.enable_data_save = enable_data_save
         self.save_folder = save_folder
@@ -46,7 +49,7 @@ class GyroStickReceiver:
             filename = f"gyro_stick_raw_data_{timestamp}.csv"
             self.csv_filepath = os.path.join(self.save_folder, filename)
             
-            # CSVヘッダーを定義
+            # CSVヘッダーを定義（led_enabledを追加）
             self.csv_headers = [
                 'timestamp',
                 'receive_time',
@@ -56,7 +59,8 @@ class GyroStickReceiver:
                 'acceleration_x', 'acceleration_y', 'acceleration_z',
                 'gyroscope_x', 'gyroscope_y', 'gyroscope_z',
                 'client_address',
-                'valid_data'
+                'valid_data',
+                'led_enabled'  # 追加
             ]
             
             # CSVファイルを初期化（ヘッダー書き込み）
@@ -94,7 +98,7 @@ class GyroStickReceiver:
                 gyro = {'x': None, 'y': None, 'z': None}
                 valid_data = False
             
-            # CSVの行データを作成
+            # CSVの行データを作成（led_enabledを追加）
             row_data = [
                 current_timestamp,
                 receive_time,
@@ -104,7 +108,8 @@ class GyroStickReceiver:
                 accel['x'], accel['y'], accel['z'],
                 gyro['x'], gyro['y'], gyro['z'],
                 str(client_addr),
-                valid_data
+                valid_data,
+                self.led_enabled  # 追加
             ]
             
             # ファイルに書き込み（スレッドセーフ）
@@ -247,9 +252,31 @@ class GyroStickReceiver:
         self.send_command('SENSOR E')
     
     def led_on(self, r=255, g=0, b=0):
-        """LED点灯"""
-        self.send_command(f'LED 0,{r},{g},{b}')
+        """LED点灯（フラグチェック付き）"""
+        if self.led_enabled:
+            self.send_command(f'LED 0,{r},{g},{b}')
     
     def led_off(self):
-        """LED消灯"""
-        self.send_command('LED 0,0,0,0')
+        """LED消灯（フラグチェック付き）"""
+        if self.led_enabled:
+            self.send_command('LED 0,0,0,0')
+    
+    def toggle_led_control(self):
+        """LED制御のオン/オフを切り替え"""
+        self.led_enabled = not self.led_enabled
+        if not self.led_enabled:
+            # LED制御をオフにした時は消灯
+            self.send_command('LED 0,0,0,0')
+        
+        status = "有効" if self.led_enabled else "無効"
+        print(f"LED制御: {status}")
+        return self.led_enabled
+    
+    def set_led_control(self, enabled):
+        """LED制御の有効/無効を設定"""
+        self.led_enabled = enabled
+        if not self.led_enabled:
+            self.send_command('LED 0,0,0,0')
+        
+        status = "有効" if self.led_enabled else "無効"
+        print(f"LED制御: {status}")

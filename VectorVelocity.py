@@ -182,6 +182,10 @@ class DirectionVelocityPipeline:
         
         self.receiver.set_data_callback(self._on_data_received)
         self.receiver.set_error_callback(self._on_error)
+        
+        # キーボード入力用
+        self.input_thread = None
+        self.running = False
     
     def _on_data_received(self, parsed_data):
         """データ受信時の処理"""
@@ -216,6 +220,31 @@ class DirectionVelocityPipeline:
         """エラー処理"""
         print(f"受信エラー: {error_msg}")
     
+    def _keyboard_input_loop(self):
+        """キーボード入力処理ループ"""
+        print("\nキーボードコマンド:")
+        print("  'l' + Enter → LED制御 オン/オフ切り替え")
+        print("  'q' + Enter → 終了")
+        print()
+        
+        while self.running:
+            try:
+                user_input = input().strip().lower()
+                
+                if user_input == 'l':
+                    # LED制御切り替え
+                    self.receiver.toggle_led_control()
+                elif user_input == 'q':
+                    # 終了
+                    print("終了コマンドが入力されました")
+                    self.stop()
+                    break
+                    
+            except (EOFError, KeyboardInterrupt):
+                break
+            except Exception as e:
+                print(f"入力エラー: {e}")
+    
     def start(self):
         """開始"""
         print("=== 方向×速度制御LED（遅延機能付き） ===")
@@ -227,11 +256,18 @@ class DirectionVelocityPipeline:
         print(f"遅延時間: {self.led_controller.delay_seconds}秒")
         print("")
         
+        self.running = True
         self.receiver.start_receiving()
+        
+        # キーボード入力スレッドを開始
+        self.input_thread = threading.Thread(target=self._keyboard_input_loop)
+        self.input_thread.daemon = True
+        self.input_thread.start()
     
     def stop(self):
         """停止"""
         print("停止中...")
+        self.running = False
         self.receiver.led_on(0, 0, 0)
         self.receiver.stop_receiving()
         print("停止完了")
@@ -256,7 +292,7 @@ if __name__ == "__main__":
     
     # 設定調整
     pipeline.configure(
-        velocity_scale=1,        # 速度感度（小さいほど敏感）
+        velocity_scale=0.8,        # 速度感度（小さいほど敏感）
         curve_power=2.5,         # 明度カーブ
         delay_seconds=0
     )
@@ -265,15 +301,10 @@ if __name__ == "__main__":
         pipeline.start()
         
         print("実行中... (Ctrl+C で停止)")
-        print("操作:")
-        print("  スティックを色々な方向に向ける → 遅れて色が変わる")
-        print("  速く動かす → 遅れて明るく点灯")
-        print("  ゆっくり動かす → 遅れて暗く点灯")
-        print("  静止する → 遅れて消灯")
-        print("")
         
-        while True:
-            time.sleep(0.1)
+        # メインループ（キーボード入力は別スレッドで処理）
+        while pipeline.running:
+            time.sleep(0.001)
             
     except KeyboardInterrupt:
         print("\n終了中...")
