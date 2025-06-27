@@ -1,3 +1,4 @@
 GyroLibvenv
 *\data
 __pycache__
+*.csv

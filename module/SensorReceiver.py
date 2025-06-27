@@ -4,7 +4,7 @@ import time
 import re
 import csv
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Callable, Optional
 
 class GyroStickReceiver:
@@ -21,6 +21,9 @@ class GyroStickReceiver:
         
         # LED制御フラグを追加
         self.led_enabled = True  # LED制御の有効/無効
+        
+        # 日本標準時のタイムゾーンを定義
+        self.jst = timezone(timedelta(hours=9))
         
         # データ保存機能
         self.enable_data_save = enable_data_save
@@ -44,15 +47,15 @@ class GyroStickReceiver:
             # 保存フォルダを作成
             os.makedirs(self.save_folder, exist_ok=True)
             
-            # タイムスタンプ付きファイル名を生成
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"gyro_stick_raw_data_{timestamp}.csv"
+            # JST時刻でタイムスタンプ付きファイル名を生成
+            timestamp = datetime.now(self.jst).strftime("%Y%m%d_%H%M%S")
+            filename = f"gyro_stick_raw_data_{timestamp}_JST.csv"
             self.csv_filepath = os.path.join(self.save_folder, filename)
             
             # CSVヘッダーを定義（led_enabledを追加）
             self.csv_headers = [
-                'timestamp',
-                'receive_time',
+                'timestamp_jst',
+                'receive_time_jst',
                 'raw_message',
                 'button',
                 'quaternion_w', 'quaternion_x', 'quaternion_y', 'quaternion_z',
@@ -60,7 +63,7 @@ class GyroStickReceiver:
                 'gyroscope_x', 'gyroscope_y', 'gyroscope_z',
                 'client_address',
                 'valid_data',
-                'led_enabled'  # 追加
+                'led_enabled'
             ]
             
             # CSVファイルを初期化（ヘッダー書き込み）
@@ -80,8 +83,9 @@ class GyroStickReceiver:
             return
         
         try:
-            # 現在時刻をタイムスタンプとして使用
-            current_timestamp = time.time()
+            # JST時刻のタイムスタンプとして保存
+            current_timestamp = datetime.now(self.jst).isoformat()
+            receive_timestamp = datetime.fromtimestamp(receive_time, self.jst).isoformat()
             
             # データを抽出
             if parsed_data['valid']:
@@ -98,10 +102,10 @@ class GyroStickReceiver:
                 gyro = {'x': None, 'y': None, 'z': None}
                 valid_data = False
             
-            # CSVの行データを作成（led_enabledを追加）
+            # CSVの行データを作成（JST時刻で保存）
             row_data = [
-                current_timestamp,
-                receive_time,
+                current_timestamp,      # JST時刻（ISO形式）
+                receive_timestamp,      # 受信時刻もJST（ISO形式）
                 raw_message,
                 button,
                 quat['w'], quat['x'], quat['y'], quat['z'],
@@ -109,7 +113,7 @@ class GyroStickReceiver:
                 gyro['x'], gyro['y'], gyro['z'],
                 str(client_addr),
                 valid_data,
-                self.led_enabled  # 追加
+                self.led_enabled
             ]
             
             # ファイルに書き込み（スレッドセーフ）

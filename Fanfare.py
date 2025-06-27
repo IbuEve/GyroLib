@@ -324,10 +324,10 @@ if __name__ == "__main__":
     # 設定調整
     pipeline.configure(
         calm_threshold=0.7,           # 落ち着きゾーン上限
-        intense_threshold=1,        # 激しいゾーン下限
+        intense_threshold=0.8,        # 激しいゾーン下限
         calm_velocity_scale=0.6,      # 落ち着きゾーン感度
-        intense_velocity_scale=2,   # 激しいゾーン感度
-        button_velocity_scale=2,    # ボタン押下時感度
+        intense_velocity_scale=1.5,   # 激しいゾーン感度
+        button_velocity_scale=1.5,    # ボタン押下時感度
         curve_power=2,              # 明度カーブ
         zone_lock_duration=0.8,       # ゾーン固定時間
         red_decay_duration=0.4        # 赤減衰時間
