@@ -96,7 +96,7 @@ class DirectionVelocityLED:
                 [0, 0, 1]
             ])
 
-    def direction_to_color_ratio(self, direction_vector, rotation_angle=20, rotation_axis='x'):
+    def direction_to_color_ratio(self, direction_vector, rotation_angle=90, rotation_axis='z'):
         """方向ベクトルを色の割合に変換"""
         # -1~1 の範囲を 0~1 に変換
         base_color = np.array([
